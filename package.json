@@ -20,7 +20,8 @@
     "setup": "node scripts/setup.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "licenses": "node scripts/check-licenses.mjs"
+    "licenses": "node scripts/check-licenses.mjs",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

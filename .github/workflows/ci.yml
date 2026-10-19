@@ -1,0 +1,36 @@
+name: Verify
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VAULT_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      DATABASE_PATH: data/ci.sqlite
+      PUBLIC_ORIGIN: http://localhost:5173
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run setup
+      - run: npm run check
+      - run: npm run smoke
+      - run: npm run test:coverage
+      - run: npm audit --audit-level=moderate
+      - run: npm run licenses
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-review
+          path: |
+            artifacts/visual
+            playwright-report
