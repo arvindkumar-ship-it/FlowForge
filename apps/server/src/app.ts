@@ -60,6 +60,25 @@ export type AppOptions = {
 /** Construct API, storage and the original durable worker runtime. */
 export async function createApp(options: AppOptions) {
   const vault = new Vault(options.vaultKey);
+  if (
+    !Number.isInteger(options.concurrency ?? 4) ||
+    (options.concurrency ?? 4) < 1 ||
+    (options.concurrency ?? 4) > 64
+  )
+    throw new FlowError(
+      "CONFIG",
+      "Worker concurrency must be an integer between 1 and 64",
+      500,
+    );
+  if (
+    !Number.isInteger(options.highWater ?? 1000) ||
+    (options.highWater ?? 1000) < 1
+  )
+    throw new FlowError(
+      "CONFIG",
+      "Queue high-water mark must be a positive integer",
+      500,
+    );
   const store = new Store(options.databasePath);
   const app = Fastify({
     logger: options.logger

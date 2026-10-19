@@ -195,15 +195,16 @@ export class Store {
         .get(now) as Run | undefined;
       if (!row) return;
       const lease = randomUUID();
+      const attempts = row.attempts + (row.status === "waiting" ? 0 : 1);
       this.db
         .prepare(
-          "UPDATE runs SET status='running',lease=?,lease_until=?,attempts=attempts+1 WHERE id=?",
+          "UPDATE runs SET status='running',lease=?,lease_until=?,attempts=? WHERE id=?",
         )
-        .run(lease, now + 90_000, row.id);
+        .run(lease, now + 90_000, attempts, row.id);
       this.db
         .prepare("INSERT INTO outbox(run_id,status,created_at) VALUES(?,?,?)")
         .run(row.id, "running", now);
-      return { ...row, status: "running", lease, attempts: row.attempts + 1 };
+      return { ...row, status: "running", lease, attempts };
     });
   }
   /** Fence stale workers and persist each completed node snapshot. */

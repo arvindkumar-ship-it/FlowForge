@@ -56,6 +56,43 @@ afterEach(async () => {
   await Promise.all(open.splice(0).map((f) => f.app.close()));
 });
 describe("API security and durability", () => {
+  it("rejects invalid worker and admission settings before opening storage", async () => {
+    for (const settings of [
+      { concurrency: 0 },
+      { concurrency: Number.NaN },
+      { concurrency: 65 },
+      { highWater: 0 },
+    ]) {
+      await expect(
+        createApp({
+          databasePath: ":memory:",
+          vaultKey: "ab".repeat(32),
+          origin: "http://localhost:5173",
+          ...settings,
+        }),
+      ).rejects.toThrow();
+    }
+  });
+  it("does not count normal wait resumes toward the crash retry budget", async () => {
+    const f = await fixture();
+    const job = f.store.enqueue(f.workflow, [{}], "manual");
+    for (let i = 0; i < 5; i++) {
+      const claimed = f.store.claim()!;
+      expect(claimed.attempts).toBe(1);
+      f.store.finish(claimed, "waiting", 0);
+    }
+    const run = f.store.claim()!;
+    f.store.db.prepare("UPDATE runs SET lease_until=0 WHERE id=?").run(job.id);
+    expect(f.store.claim()!.attempts).toBe(2);
+    f.store.db.prepare("UPDATE runs SET lease_until=0 WHERE id=?").run(job.id);
+    expect(f.store.claim()!.attempts).toBe(3);
+    f.store.db.prepare("UPDATE runs SET lease_until=0 WHERE id=?").run(job.id);
+    expect(f.store.claim()).toBeUndefined();
+    expect(
+      f.store.db.prepare("SELECT status FROM runs WHERE id=?").get(run.id)!
+        .status,
+    ).toBe("crashed");
+  });
   it("rejects missing key, unauthorized access and cross-origin writes", async () => {
     await expect(
       createApp({ databasePath: ":memory:", vaultKey: "", origin: "x" }),
