@@ -27,7 +27,9 @@ export async function safeHttp(p: Record<string, unknown>, signal: AbortSignal, 
   let url: URL;
   try { url = new URL(String(p.url)); } catch { throw new FlowError('INVALID_URL', 'HTTP node requires an absolute URL'); }
   if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || (url.port && !['80', '443'].includes(url.port))) throw new FlowError('SSRF_BLOCKED', 'Only public HTTP(S) on ports 80/443 is allowed');
-  const addresses = await lookup(url.hostname, { all: true, family: 4 });
+  if (secret && url.protocol !== 'https:') throw new FlowError('CREDENTIAL_TLS', 'Credentials require an HTTPS destination');
+  let dnsTimer: ReturnType<typeof setTimeout> | undefined;
+  const addresses = await Promise.race([lookup(url.hostname, { all: true, family: 4 }), new Promise<never>((_resolve, reject) => { dnsTimer = setTimeout(() => reject(new FlowError('DNS_TIMEOUT', 'DNS lookup timed out')), 5000); })]).finally(() => clearTimeout(dnsTimer));
   if (!addresses.length || addresses.some(a => !publicIPv4(a.address))) throw new FlowError('SSRF_BLOCKED', 'Private or reserved network addresses are forbidden');
   const address = addresses[0]!;
   const dispatcher = new Agent({ connect: { lookup: (_host, _opts, callback) => callback(null, [{ address: address.address, family: 4 }]) } });

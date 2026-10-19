@@ -17,6 +17,7 @@ export function validateGraph(input: unknown): { graph: Graph; order: string[] }
   const result = graphSchema.safeParse(input);
   if (!result.success) throw new FlowError('INVALID_GRAPH', result.error.issues.map(i => i.message).join('; '));
   const graph = result.data;
+  if (graph.nodes.some(n => ['__proto__', 'prototype', 'constructor'].includes(n.id))) throw new FlowError('RESERVED_NODE', 'Reserved node identifiers are forbidden');
   const ids = new Set(graph.nodes.map(n => n.id));
   if (ids.size !== graph.nodes.length) throw new FlowError('DUPLICATE_NODE', 'Node identifiers must be unique');
   const indegree = new Map(graph.nodes.map(n => [n.id, 0]));

@@ -7,6 +7,7 @@ const node = (id: string, type: Graph['nodes'][number]['type'], parameters = {})
 const graph = (...nodes: Graph['nodes']): Graph => ({ nodes, edges: nodes.slice(1).map((n, i) => ({ id: String(i), source: nodes[i]!.id, target: n.id })) });
 const options = () => ({ id: 'run', input: [{ amount: 20 }], signal: new AbortController().signal, checkpoint: vi.fn(), http: vi.fn(async () => ({ ok: true })) });
 describe('graph validation', () => {
+  it('rejects prototype node identifiers', () => { for (const id of ['__proto__', 'constructor', 'prototype']) expect(() => validateGraph(graph(node(id, 'manual')))).toThrow('Reserved'); });
   it('orders a valid graph', () => expect(validateGraph(graph(node('a', 'manual'), node('b', 'merge'))).order).toEqual(['a', 'b']));
   it('rejects malformed graphs', () => expect(() => validateGraph({})).toThrow('array'));
   it('rejects duplicates', () => expect(() => validateGraph(graph(node('a', 'manual'), node('a', 'set')))).toThrow('unique'));
@@ -45,6 +46,11 @@ describe('vault', () => {
   it('fails fast without a valid key', () => expect(() => new Vault('short')).toThrow('32 bytes'));
 });
 describe('engine', () => {
+  it('bounds output growth while mapping items and caps aggregate data', async () => {
+    await expect(execute(graph(node('a', 'manual'), node('b', 'set', { fields: { x: 'x'.repeat(1024 * 1024) } })), { ...options(), input: Array.from({ length: 5 }, () => ({})) })).rejects.toThrow('4 MiB');
+    const nodes: Graph['nodes'] = [node('a', 'manual'), ...Array.from({ length: 5 }, (_, i) => node('step' + i, 'merge'))];
+    await expect(execute(graph(...nodes), { ...options(), input: [{ x: 'x'.repeat(3 * 1024 * 1024) }] })).rejects.toThrow('16 MiB');
+  });
   it('transforms and filters data', async () => {
     const r = await execute(graph(node('a', 'manual'), node('b', 'set', { fields: { total: '=$json.amount * 2' } }), node('c', 'filter', { condition: '=$json.total > 30' })), options());
     expect(r.snapshot.outputs.c).toEqual([{ amount: 20, total: 40 }]);

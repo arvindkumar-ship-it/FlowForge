@@ -14,21 +14,28 @@ export async function execute(graph: Graph, options: { id: string; input: Item[]
     const parents = graph.edges.filter(e => e.target === node.id);
     const input = parents.length ? parents.flatMap(e => snapshot.outputs[e.source] ?? []) : options.input;
     if (input.length > 10_000) throw new FlowError('ITEM_LIMIT', 'Node input exceeds 10,000 items');
-    const nodeStart = Date.now(); let output: Item[] = [];
+    const nodeStart = Date.now(); let output: Item[] = []; let outputBytes = 0;
+    const push = (item: Item) => {
+      outputBytes += Buffer.byteLength(JSON.stringify(item));
+      if (outputBytes > 4 * 1024 * 1024) throw new FlowError('OUTPUT_LIMIT', 'Node output exceeds 4 MiB');
+      output.push(item);
+    };
     try {
       if (node.type === 'manual' || node.type === 'webhook' || node.type === 'merge' || node.type === 'wait') output = input;
       else if (node.type === 'fail') throw new FlowError('NODE_FAILED', 'Workflow stopped by Fail node');
       else for (const [index, item] of input.entries()) {
         options.signal.throwIfAborted();
+        if (Date.now() - started > 60_000) throw new FlowError('EXECUTION_TIMEOUT', 'Execution exceeded one minute');
         const p = resolveValue(node.parameters, { $json: item, $execution: { id: options.id }, $itemIndex: index }) as Record<string, unknown>;
         if (node.type === 'set') {
           if (!p.fields || typeof p.fields !== 'object' || Array.isArray(p.fields)) throw new FlowError('INVALID_FIELDS', 'Set node needs a fields object');
-          output.push(p.keepInput === false ? p.fields as Item : { ...item, ...p.fields as Item });
-        } else if (node.type === 'filter') { if (p.condition) output.push(item); }
-        else if (node.type === 'http') output.push(await options.http(p, options.signal, `${options.id}:${node.id}:${index}`));
+          push(p.keepInput === false ? p.fields as Item : { ...item, ...p.fields as Item });
+        } else if (node.type === 'filter') { if (p.condition) push(item); }
+        else if (node.type === 'http') push(await options.http(p, options.signal, `${options.id}:${node.id}:${index}`));
       }
       if (Buffer.byteLength(JSON.stringify(output)) > 4 * 1024 * 1024) throw new FlowError('OUTPUT_LIMIT', 'Node output exceeds 4 MiB');
       snapshot.outputs[node.id] = output;
+      if (Buffer.byteLength(JSON.stringify(snapshot.outputs)) > 16 * 1024 * 1024) { delete snapshot.outputs[node.id]; throw new FlowError('EXECUTION_SIZE', 'Execution data exceeds 16 MiB'); }
       snapshot.traces.push({ nodeId: node.id, startedAt: nodeStart, duration: Date.now() - nodeStart, items: output.length, status: 'success' });
       if (node.type === 'wait') {
         const seconds = Number(node.parameters.seconds ?? 1);
