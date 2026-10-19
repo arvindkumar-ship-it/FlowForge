@@ -349,6 +349,16 @@ describe("API security and durability", () => {
         })
       ).statusCode,
     ).toBe(202);
+    expect(
+      (
+        await f.app.inject({
+          method: "PUT",
+          url: `/api/workflows/${w.id}`,
+          headers: f.headers,
+          payload: { name: "Hook", graph, version: w.version },
+        })
+      ).statusCode,
+    ).toBe(409);
   });
 });
 describe("network and password guards", () => {

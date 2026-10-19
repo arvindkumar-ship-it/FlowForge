@@ -305,9 +305,15 @@ export async function createApp(options: AppOptions) {
   });
   app.put<{ Params: { id: string } }>("/api/workflows/:id", async (req) => {
     requireWrite(req.user);
-    findWorkflow(req.params.id, req.user!.project_id);
+    const current = findWorkflow(req.params.id, req.user!.project_id);
     const data = workflowSchema.parse(req.body);
     const { graph } = validateGraph(data.graph);
+    if (current.active && !graph.nodes.some((n) => n.type === "webhook"))
+      throw new FlowError(
+        "ACTIVE_TRIGGER",
+        "Deactivate the workflow before changing its trigger",
+        409,
+      );
     return store.saveWorkflow(
       req.user!.project_id,
       req.user!.id,
