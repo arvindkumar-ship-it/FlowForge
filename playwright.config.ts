@@ -9,7 +9,7 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never" }]],
   webServer: {
     command: "npm run dev",
-    url: "http://localhost:5173",
+    url: "http://localhost:5173/api/auth/status",
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },

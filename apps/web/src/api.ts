@@ -48,7 +48,12 @@ export async function api<T>(
       options?.body === undefined ? undefined : JSON.stringify(options.body),
     signal: AbortSignal.timeout(20_000),
   });
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("FlowForge is temporarily unavailable. Please retry.");
+  }
   if (!response.ok)
     throw new Error(data.title ?? "Request failed. Please try again.");
   return data as T;
